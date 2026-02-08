@@ -1,0 +1,9 @@
+Flask==3.0.0
+Flask-SQLAlchemy==3.1.1
+Flask-CORS==4.0.0
+Flask-JWT-Extended==4.6.0
+PyGithub==1.59.1
+python-dotenv==1.0.0
+click==8.1.7
+mysqlclient==2.2.4  # Za MySQL podršku
+# Ili: pymysql==1.1.0  # Alternativa za mysqlclient
