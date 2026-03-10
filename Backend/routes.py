@@ -934,13 +934,6 @@ def github_oauth_callback():
         f"http://localhost:3000/oauth/callback?token={access_token}&username={user.username}"
     )
 
-
-# ------------------ TRACKED REPOS & DASHBOARD & STATS ROUTES ------------------
-# Ostale rute ostaju iste kao što si imao, samo obrati pažnju na:
-# 1) Parsiranje datuma sa dateutil
-# 2) Koristi user.id kao JWT identity
-# 3) Role provera preko .value ili enum
-
 # ------------------ ERROR HANDLERS ------------------
 @api.errorhandler(404)
 def handle_not_found(error):

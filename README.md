@@ -87,10 +87,8 @@ GITHUB_TOKEN=ghp_your_personal_access_token
 ```
 main          ← stabilna produkcija
 develop       ← integracija feature-a  
-feature/auth              ← autentifikacija i JWT
-feature/github-api        ← GitHub API integracija
-feature/docker            ← Docker konfiguracija
-feature/swagger-ci        ← Swagger + CI/CD
+feature/login              ← autentifikacija i JWT
+feature/dashboard          ← rad na frontend-u
 ```
 
 ## 🧪 Testovi

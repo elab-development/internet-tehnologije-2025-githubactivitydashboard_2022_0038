@@ -128,7 +128,6 @@ class Activity(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     github_id = db.Column(db.String(100), unique=True, nullable=False, index=True)
     activity_type = db.Column(db.Enum('commit','push', 'pull_request', 'issue', 'create', 'delete', 'fork', 'watch', name='activity_type'), nullable=False)
-    #activity_type = db.Column(db.Enum(ActivityType), nullable=False)
     actor = db.Column(db.String(100), nullable=False, index=True)
     action = db.Column(db.String(100))
     ref = db.Column(db.String(200))
@@ -137,7 +136,7 @@ class Activity(db.Model):
     repository_id = db.Column(db.Integer, db.ForeignKey('repositories.id'), nullable=False, index=True)
     branch_id = db.Column(db.Integer, db.ForeignKey('branches.id'), index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    #repository = db.relationship('Repository', backref='activities', lazy=True)
+
     def to_dict(self):
         return {
             'id': self.id,

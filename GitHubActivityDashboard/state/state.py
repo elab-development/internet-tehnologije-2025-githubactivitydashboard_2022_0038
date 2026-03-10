@@ -12,7 +12,7 @@ class State(rx.State):
     email: str = ""
     password: str = ""
     confirm_password: str = ""
-    access_token: str = ""          # ← JEDAN token, svuda access_token
+    access_token: str = ""          
     is_authenticated: bool = False
     current_user: Dict = {}
 
@@ -176,7 +176,7 @@ class State(rx.State):
 
             if r.status_code == 200:
                 data = r.json()
-                self.access_token = data["access_token"]   # ← uvek access_token
+                self.access_token = data["access_token"]   
                 self.current_user = data.get("user", {})
                 self.is_authenticated = True
                 self.password = ""
@@ -271,75 +271,12 @@ class State(rx.State):
             self.error_message = f"Error loading repositories: {str(e)}"
         finally:
             self.is_loading_repos = False
-    # async def load_repos_list(self):
-    #     """Dohvata repozitorijume sa GitHub API-ja za ulogovanog korisnika"""
-    #     self.is_loading_repos = True
-    #     self.error_message = ""
-
-    #     if self.github_username:
-    #         result = await self.api_request(
-    #             "GET",
-    #             f"/github/user/{self.github_username}/repos",
-    #             {"sort": "updated", "per_page": 30},
-    #         )
-    #         if "error" not in result:
-    #             self.repos_list = result.get("repos", [])
-    #         else:
-    #             # Fallback na lokalnu bazu
-    #             result = await self.api_request(
-    #                 "GET", "/repositories", {"page": 1, "per_page": 20}
-    #             )
-    #             if "error" not in result:
-    #                 self.repos_list = result.get("repositories", [])
-    #     else:
-    #         result = await self.api_request(
-    #             "GET", "/repositories", {"page": 1, "per_page": 20}
-    #         )
-    #         if "error" not in result:
-    #             self.repos_list = result.get("repositories", [])
-
-    #     self.is_loading_repos = False
+    
 
     # ===========================
     # REPO DETAILS
     # ===========================
 
-    # async def load_repo_details_from_url(self):
-    #     """Dohvata detalje repozitorijuma iz URL parametara"""
-    #     self.is_loading_details = True
-    #     self.error_message = ""
-
-    #     owner     = self.router.page.params.get("owner", "")
-    #     repo_name = self.router.page.params.get("repo", "")
-
-    #     if not owner or not repo_name:
-    #         self.error_message = "Nedostaju parametri URL-a"
-    #         self.is_loading_details = False
-    #         return
-
-    #     result = await self.api_request(
-    #         "GET", f"/github/repo/{owner}/{repo_name}"
-    #     )
-
-    #     if "error" not in result:
-    #         self.repo_details = result          # ← čuvaj u repo_details dict
-    #         self.selected_owner = owner
-    #         self.selected_repo = repo_name
-
-    #         # Aktivnosti = poslednji commitovi
-    #         self.activities = [
-    #             {
-    #                 "type":    "commit",
-    #                 "message": c.get("message", ""),
-    #                 "author":  c.get("author", ""),
-    #                 "time":    c.get("date", "")[:10],
-    #             }
-    #             for c in result.get("recent_commits", [])
-    #         ]
-    #     else:
-    #         self.error_message = result["error"]
-
-    #     self.is_loading_details = False
     async def load_repo_details_by_id(self, repo_id: int):
         """Load repository details by ID"""
         self.is_loading_details = True
@@ -374,39 +311,13 @@ class State(rx.State):
             if repo_id:
                 await self.load_repo_details_by_id(repo_id)
             else:
-                # If not in list, try to find by name
+                
                 print()
-                # await self.search_and_load_repo(owner, repo)
+                
     # ===========================
     # ACTIVITIES
     # ===========================
 
-    # async def load_repo_activities(self):
-    #     self.is_loading_activities = True
-    #     self.error_message = ""
-
-    #     params = {"page": 1, "per_page": 50}
-
-    #     if self.activity_type != "all":
-    #         type_map = {
-    #             "commits":       "push",
-    #             "pull_requests": "pull_request",
-    #             "issues":        "issue",
-    #             "releases":      "create",
-    #         }
-    #         params["type"] = type_map.get(self.activity_type, self.activity_type)
-
-    #     if self.repo_details.get("id"):
-    #         params["repository_id"] = self.repo_details["id"]
-
-    #     result = await self.api_request("GET", "/activities", params)
-
-    #     if "error" not in result:
-    #         self.activities = result.get("activities", [])
-    #     else:
-    #         self.error_message = result["error"]
-
-    #     self.is_loading_activities = False
     async def load_repo_activities(self):
         self.is_loading_activities = True
         self.error_message = ""
@@ -442,26 +353,7 @@ class State(rx.State):
             self.error_message = result["error"]
 
         self.is_loading_activities = False
-    # async def load_repo_activities_by_id(self, repo_id: int):
-    #     """Load activities for specific repository"""
-    #     self.is_loading_activities = True
-    #     self.error_message = ""
         
-    #     try:
-    #         result = await self.api_request("GET", f"/activities/repository/{repo_id}", {
-    #             "page": 1,
-    #             "per_page": 50
-    #         })
-            
-    #         if "error" in result:
-    #             self.error_message = result["error"]
-    #         else:
-    #             self.activities = result.get("activities", [])
-                
-    #     except Exception as e:
-    #         self.error_message = f"Error loading repository activities: {str(e)}"
-    #     finally:
-    #         self.is_loading_activities = False
     async def load_repo_activities_by_id(self, repo_id: int):
         self.is_loading_activities = True
         self.error_message = ""

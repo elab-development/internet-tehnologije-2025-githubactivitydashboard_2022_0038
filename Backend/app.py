@@ -77,7 +77,6 @@ CORS(app, resources={
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"],
         "supports_credentials": False,
-        #"supports_credentials": True,
     }
 })
 
@@ -177,94 +176,6 @@ def get_limiter():
     return limiter
 
 
-# # ─── DB Init (za lokalni dev) ─────────────────────────────────────
-# def initialize_database():
-#     """Initialize database with tables and seed data"""
-#     with app.app_context():
-#         try:
-#             import pymysql
-#             from urllib.parse import urlparse
-#             db_url = app.config['SQLALCHEMY_DATABASE_URI']
-#             parsed = urlparse(db_url)
-#             connection = pymysql.connect(
-#                 host=parsed.hostname or 'localhost',
-#                 port=parsed.port or 3306,
-#                 user=parsed.username or 'root',
-#                 password=parsed.password or '',
-#                 database=parsed.path[1:] if parsed.path else None,
-#                 charset='utf8mb4',
-#             )
-#             connection.close()
-#             print("[INFO] MySQL connection OK")
-#         except Exception as e:
-#             print(f"[ERROR] MySQL connection failed: {e}")
-#             return False
-
-#         db.create_all()
-#         print("[INFO] Tables created")
-
-#         from werkzeug.security import generate_password_hash
-#         from models import User, Repository, Activity, Branch
-
-#         if User.query.count() == 0:
-#             for uname, email, pwd, role in [
-#                 ('admin',     'admin@dashboard.com',     'admin123',     'admin'),
-#                 ('moderator', 'moderator@dashboard.com', 'moderator123', 'moderator'),
-#                 ('viewer',    'viewer@dashboard.com',    'viewer123',    'viewer'),
-#             ]:
-#                 db.session.add(User(
-#                     username=uname, email=email,
-#                     password_hash=generate_password_hash(pwd), role=role
-#                 ))
-#             db.session.commit()
-#             print("[INFO] Default users created")
-
-#         if Repository.query.count() == 0:
-#             repos = [
-#                 Repository(github_id=28457823, name='flask',  full_name='pallets/flask',
-#                            owner='pallets',   url='https://github.com/pallets/flask',
-#                            description='Python micro framework', stars=65000, forks=16000, language='Python'),
-#                 Repository(github_id=4164482,  name='django', full_name='django/django',
-#                            owner='django',    url='https://github.com/django/django',
-#                            description='Web framework for perfectionists', stars=75000, forks=31000, language='Python'),
-#                 Repository(github_id=10270250, name='react',  full_name='facebook/react',
-#                            owner='facebook', url='https://github.com/facebook/react',
-#                            description='JavaScript library for UIs', stars=220000, forks=46000, language='JavaScript'),
-#             ]
-#             for r in repos:
-#                 db.session.add(r)
-#             db.session.commit()
-
-#             from datetime import datetime, timedelta
-#             flask_repo  = Repository.query.filter_by(full_name='pallets/flask').first()
-#             django_repo = Repository.query.filter_by(full_name='django/django').first()
-
-#             branches = [
-#                 Branch(name='main',        last_commit_sha='abc123', is_protected=True,  repository_id=flask_repo.id),
-#                 Branch(name='development', last_commit_sha='def456', is_protected=False, repository_id=flask_repo.id),
-#                 Branch(name='main',        last_commit_sha='ghi789', is_protected=True,  repository_id=django_repo.id),
-#             ]
-#             for b in branches:
-#                 db.session.add(b)
-#             db.session.commit()
-
-#             activities = [
-#                 Activity(github_id='commit_abc123', activity_type='push',         actor='octocat',    action='pushed',
-#                          ref='Fixed bug in auth',    timestamp=datetime.utcnow() - timedelta(hours=1),
-#                          data={'sha': 'abc123'},     repository_id=flask_repo.id,  branch_id=branches[0].id),
-#                 Activity(github_id='pr_123',         activity_type='pull_request', actor='developer1', action='opened',
-#                          ref='Add new feature',      timestamp=datetime.utcnow() - timedelta(hours=2),
-#                          data={'number': 123},       repository_id=flask_repo.id,  branch_id=branches[1].id),
-#                 Activity(github_id='issue_456',      activity_type='issue',        actor='user2',       action='opened',
-#                          ref='Bug: Crash on startup',timestamp=datetime.utcnow() - timedelta(hours=3),
-#                          data={'number': 456},       repository_id=django_repo.id, branch_id=branches[2].id),
-#             ]
-#             for a in activities:
-#                 db.session.add(a)
-#             db.session.commit()
-#             print("[INFO] Sample data created")
-
-#         return True
 import time
 from urllib.parse import urlparse
 from werkzeug.security import generate_password_hash
@@ -361,32 +272,6 @@ def initialize_database(max_retries=10, delay=3):
             print("[INFO] Sample data created")
 
         return True
-# Ovo se izvršava i kada gunicorn pokrene app
-# def create_tables():
-#     with app.app_context():
-#         try:
-#             db.create_all()
-#             print("[INFO] Tables created/verified")
-            
-#             from werkzeug.security import generate_password_hash
-#             from models import User
-            
-#             if User.query.count() == 0:
-#                 for uname, email, pwd, role in [
-#                     ('admin',     'admin@dashboard.com',     'admin123',     'admin'),
-#                     ('moderator', 'moderator@dashboard.com', 'moderator123', 'moderator'),
-#                     ('viewer',    'viewer@dashboard.com',    'viewer123',    'viewer'),
-#                 ]:
-#                     db.session.add(User(
-#                         username=uname, email=email,
-#                         password_hash=generate_password_hash(pwd), role=role
-#                     ))
-#                 db.session.commit()
-#                 print("[INFO] Default users created")
-#         except Exception as e:
-#             print(f"[ERROR] Table creation failed: {e}")
-
-# Pozovi odmah — radi i za gunicorn i za python app.py
 initialize_database()
 # create_tables()
 

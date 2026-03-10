@@ -13,16 +13,6 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . ./GitHubActivityDashboard/
-# # Primer za Linux container
-# RUN curl -sSL https://reflex.run/install.sh | bash
-
-# # Dodaj reflex u PATH
-# ENV PATH="/root/.reflex/bin:${PATH}"
-
-# # Sada inicijalizuj projekat
-# RUN reflex init
-# # Inicijalizuj Reflex projekat
-# rxconfig.py mora biti u /app/ root-u, ne u subfoldera
 RUN cp ./GitHubActivityDashboard/rxconfig.py ./rxconfig.py
 
 RUN reflex init

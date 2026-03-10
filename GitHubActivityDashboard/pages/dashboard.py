@@ -7,7 +7,6 @@ from GitHubActivityDashboard.components.card import Card
 @rx.page(route="/dashboard", on_load=State.load_dashboard_data)
 def dashboard_page() -> rx.Component:
     # Poziv akcije koja fetchuje podatke sa backend-a
-    #State.fetch_dashboard()
 
     return rx.box(
         NavBar(),
