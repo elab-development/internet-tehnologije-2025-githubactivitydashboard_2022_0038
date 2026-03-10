@@ -46,17 +46,6 @@ def login_page() -> rx.Component:
                     border_radius="16px",
                     box_shadow="1",
                 ),
-                rx.divider(),
-                rx.text("ili", text_align="center", color="white"),
-                rx.link(
-                    rx.button(
-                        "Prijavi se putem GitHub-a",
-                        color_scheme="green",
-                        variant="outline",
-                        width="100%",
-                    ),
-                    href="http://localhost:5000/api/auth/github",
-                ),
                 spacing="6",
                 align="center",
             ),
