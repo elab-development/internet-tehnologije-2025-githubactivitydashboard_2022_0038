@@ -4,7 +4,11 @@ from GitHubActivityDashboard.state.state import State
 from GitHubActivityDashboard.components.loading import LoadingSpinner
 from GitHubActivityDashboard.components.card import Card
 
+@rx.page(route="/dashboard", on_load=State.load_dashboard_data)
 def dashboard_page() -> rx.Component:
+    # Poziv akcije koja fetchuje podatke sa backend-a
+    #State.fetch_dashboard()
+
     return rx.box(
         NavBar(),
         rx.container(
@@ -12,6 +16,7 @@ def dashboard_page() -> rx.Component:
                 State.is_loading_dashboard,
                 LoadingSpinner("Učitavanje dashboard podataka..."),
                 rx.vstack(
+                    # Welcome header
                     rx.heading(f"Dobrodošli, {State.github_username}!", size="8", color="purple"),
                     rx.text("Pregled svih aktivnosti i metrika", size="4", color="purple"),
                     rx.divider(margin_y="2em"),
@@ -21,25 +26,25 @@ def dashboard_page() -> rx.Component:
                     rx.grid(
                         Card(
                             title="Repozitorijumi",
-                            content=f"{State.dashboard_metrics.get('total_repos', 0)} ukupno",
+                            content=f"{State.total_repos} ukupno",
                             icon="📦",
                             badge="Active",
                         ),
                         Card(
                             title="Commits",
-                            content=f"{State.dashboard_metrics.get('total_commits', 0)} ukupno",
+                            content=f"{State.total_commits} ukupno",
                             icon="📝",
                             badge="1,847",
                         ),
                         Card(
                             title="Pull Requests",
-                            content=f"{State.dashboard_metrics.get('total_prs', 0)} ukupno",
+                            content=f"{State.total_prs} ukupno",
                             icon="🔀",
                             badge="156",
                         ),
                         Card(
                             title="Issues",
-                            content=f"{State.dashboard_metrics.get('total_issues', 0)} ukupno",
+                            content=f"{State.total_issues} ukupno",
                             icon="🐛",
                             badge="89",
                         ),
@@ -141,6 +146,18 @@ def dashboard_page() -> rx.Component:
                                     ),
                                     href="/repos",
                                 ),
+                                rx.link(
+                                    rx.button(
+                                        rx.hstack(
+                                            rx.text("🐙"),
+                                            rx.text("GitHub Explorer"),
+                                            spacing="2",
+                                        ),
+                                        color_scheme="green",
+                                        _hover={"transform": "scale(1.05)", "transition": "0.2s"},
+                                    ),
+                                    href="/github",
+                                ),
                                 spacing="3",
                                 wrap="wrap",
                             ),
@@ -154,7 +171,7 @@ def dashboard_page() -> rx.Component:
                         width="100%",
                         margin_top="2em",
                     ),
-                    
+                    # 
                     spacing="6",
                     padding_y="3em",
                 ),
@@ -164,4 +181,5 @@ def dashboard_page() -> rx.Component:
         ),
         min_height="100vh",
         bg="linear-gradient(to bottom, #f7fafc, #edf2f7)",
+        on_mount=State.fetch_dashboard
     )
