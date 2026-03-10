@@ -1,0 +1,24 @@
+
+Flask==3.0.0
+Flask-SQLAlchemy==3.1.1
+Flask-CORS==4.0.0
+Flask-JWT-Extended==4.6.0
+Flask-Migrate==4.0.7
+PyGithub==1.59.1
+python-dotenv==1.0.0
+click==8.1.7
+pymysql==1.1.0
+cryptography==42.0.5
+gunicorn==22.0.0
+python-dateutil==2.9.0
+
+# Swagger
+flasgger==0.9.7.1
+
+# Bezbednost
+bleach==6.1.0
+flask-limiter==3.8.0
+
+# Testovi
+pytest==8.2.2
+pytest-flask==1.3.0

@@ -1,0 +1,96 @@
+
+
+services:
+  # ─── MySQL Database ────────────────────────────────────────────────
+  db:
+    image: mysql:8.0
+    container_name: gh_dashboard_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-github_dashboard}
+      MYSQL_USER: ${MYSQL_USER:-ghuser}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-ghpassword}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost",
+             "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-rootpassword}"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    networks:
+      - app_network
+
+  # ─── Flask Backend ─────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./Backend
+      dockerfile: Dockerfile
+    container_name: gh_dashboard_backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: mysql+pymysql://${MYSQL_USER:-ghuser}:${MYSQL_PASSWORD:-ghpassword}@db:3306/${MYSQL_DATABASE:-github_dashboard}
+      SECRET_KEY: ${SECRET_KEY:-change-in-production}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-jwt-in-production}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      FLASK_ENV: ${FLASK_ENV:-production}
+    ports:
+      - "5000:5000"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ─── Reflex Frontend ───────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./GitHubActivityDashboard
+      dockerfile: Dockerfile
+    container_name: gh_dashboard_frontend
+    restart: unless-stopped
+    environment:
+      API_URL: http://backend:5000
+    ports:
+      - "3000:3000"
+      - "8000:8000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - app_network
+
+  # ─── Nginx Reverse Proxy ───────────────────────────────────────────
+  nginx:
+    image: nginx:latest
+    container_name: gh_dashboard_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/nginx/nginx.config:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - app_network
+
+volumes:
+  mysql_data:
+
+networks:
+  app_network:
+    driver: bridge
