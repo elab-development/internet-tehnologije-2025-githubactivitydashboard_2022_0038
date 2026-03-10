@@ -6,7 +6,7 @@ load_dotenv()
 
 class Config:
     # MySQL konfiguracija
-    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', 'mysql://root:password@localhost/github_dashboard')
+    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', 'mysql://root:@localhost/github_dashboard')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
         'pool_recycle': 299,
@@ -20,3 +20,4 @@ class Config:
     
     # GitHub API settings
     GITHUB_TOKEN = os.getenv('GITHUB_TOKEN', '')
+#%%
