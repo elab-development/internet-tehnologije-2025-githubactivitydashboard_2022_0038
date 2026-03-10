@@ -93,6 +93,8 @@ def repo_details_page() -> rx.Component:
                                                     rx.match(
                                                         activity["type"],
                                                         ("commit", "📝"),
+                                                        ("push", "📝"),        # ← dodaj ovo
+                                                        ("pull_request", "🔀"), 
                                                         ("pr", "🔀"),
                                                         ("issue", "🐛"),
                                                         ("release", "🎉"),

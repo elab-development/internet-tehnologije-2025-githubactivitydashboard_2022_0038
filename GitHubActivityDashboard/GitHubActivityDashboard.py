@@ -3,6 +3,8 @@ from typing import List, Dict, Optional
 import asyncio
 from datetime import datetime, timedelta
 import random
+from GitHubActivityDashboard.pages.github_explore import github_explore_page
+from GitHubActivityDashboard.pages.oauth_callback import oauth_callback_page
 from GitHubActivityDashboard.pages.login import login_page
 from GitHubActivityDashboard.pages.dashboard import dashboard_page
 from GitHubActivityDashboard.pages.reposlist import repos_list_page
@@ -46,3 +48,5 @@ app.add_page(
     title="GitHub Dashboard - Repository Details",
     on_load=State.load_repo_details_from_url
 )
+app.add_page(github_explore_page, route="/github")
+app.add_page(oauth_callback_page, route="/oauth/callback")
