@@ -137,7 +137,7 @@ class Activity(db.Model):
     repository_id = db.Column(db.Integer, db.ForeignKey('repositories.id'), nullable=False, index=True)
     branch_id = db.Column(db.Integer, db.ForeignKey('branches.id'), index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
+    #repository = db.relationship('Repository', backref='activities', lazy=True)
     def to_dict(self):
         return {
             'id': self.id,

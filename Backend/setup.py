@@ -46,7 +46,7 @@ def setup_environment():
         print("\nCreating .env file...")
         with open(env_file, 'w') as f:
             f.write("""# MySQL database
-DATABASE_URL=mysql://root:yourpassword@localhost:3306/github_dashboard
+DATABASE_URL=mysql://root:@localhost:3306/github_dashboard
 
 # Secret keys
 SECRET_KEY=your-super-secret-key-12345-change-in-production
@@ -59,6 +59,9 @@ GITHUB_TOKEN=your_github_token_here_optional
         print("[INFO] Please edit .env file with your MySQL credentials")
 
 if __name__ == '__main__':
+    import sys
+    sys.path.append(r"C:\GitHubActivityDashboard\internet-tehnologije-2025-githubactivitydashboard_2022_0038\Backend")
+    #sys.path.extend(['C:\\GitHubActivityDashboard'])
     print("GitHub Activity Dashboard Setup")
     print("="*60)
     
@@ -77,3 +80,4 @@ if __name__ == '__main__':
     print("  - Windows: Start XAMPP/WAMP MySQL")
     print("  - Linux: sudo service mysql start")
     print("  - Mac: brew services start mysql")
+#%%
