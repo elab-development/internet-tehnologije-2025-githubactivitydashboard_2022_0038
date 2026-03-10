@@ -1,332 +1,402 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
+from flask_migrate import Migrate
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flasgger import Swagger
 from config import Config
 import logging
 import pymysql
 pymysql.install_as_MySQLdb()
-# Kreirajte Flask aplikaciju prvo
+
+# ─── App inicijalizacija ───────────────────────────────────────────
 app = Flask(__name__)
 app.config.from_object(Config)
 
-# Setup CORS
+# ─── Swagger konfiguracija ─────────────────────────────────────────
+swagger_config = {
+    "headers": [],
+    "specs": [
+        {
+            "endpoint": "apispec",
+            "route": "/apispec.json",
+            "rule_filter": lambda rule: True,
+            "model_filter": lambda tag: True,
+        }
+    ],
+    "static_url_path": "/flasgger_static",
+    "swagger_ui": True,
+    "specs_route": "/apidocs/",
+    "swagger_ui_config": {
+        "persistAuthorization": True,    # ← token ostaje sačuvan
+        "displayRequestDuration": True,  # ← vidiš koliko traje request
+    },
+}
+
+swagger_template = {
+    "swagger": "2.0",
+    "info": {
+        "title": "GitHub Activity Dashboard API",
+        "description": (
+            "REST API za praćenje GitHub aktivnosti.\n\n"
+            "## Autentifikacija\n"
+            "API koristi JWT Bearer tokene. Nakon logina, "
+            "dodaj header: `Authorization: Bearer <token>`"
+        ),
+        "version": "1.0.0",
+        "contact": {"name": "GitHub Activity Dashboard"},
+    },
+    "basePath": "/",
+    "schemes": ["http", "https"],
+    "securityDefinitions": {
+        "Bearer": {
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header",
+            "description": "JWT token format: **Bearer &lt;token&gt;**",
+        }
+    },
+    "security": [{"Bearer": []}],
+    "tags": [
+        {"name": "Auth",         "description": "Registracija, login, korisničke informacije"},
+        {"name": "Repositories", "description": "CRUD operacije nad repozitorijumima"},
+        {"name": "Activities",   "description": "Pregled GitHub aktivnosti"},
+        {"name": "Stats",        "description": "Statistike i pregledi"},
+    ],
+}
+
+swagger = Swagger(app, config=swagger_config, template=swagger_template)
+
+# ─── CORS ─────────────────────────────────────────────────────────
 CORS(app, resources={
     r"/api/*": {
-        "origins": ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:8000"],
+        "origins": ["http://localhost:3000", "http://127.0.0.1:3000",
+                    "http://localhost:8000", "http://localhost:80", "http://localhost",       # ← dodaj ovo
+                    "http://frontend:3000", "*"],
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"]
+        "allow_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": False,
+        #"supports_credentials": True,
     }
 })
 
-# Setup JWT
+# ─── JWT ──────────────────────────────────────────────────────────
 jwt = JWTManager(app)
 
-# Setup database
+# ─── Database + Migrate ───────────────────────────────────────────
 from models import db
 db.init_app(app)
+migrate = Migrate(app, db)
 
-# Setup routes
+# ─── Rate Limiter (zaštita od brute-force) ────────────────────────
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per hour", "50 per minute"],
+    storage_uri="memory://",
+)
+
+# ─── Security Headers (XSS, Clickjacking zaštita) ─────────────────
+@app.after_request
+def set_security_headers(response):
+    # Swagger UI - preskoči CSP, inače ne radi
+    if (request.path.startswith('/apidocs') or 
+        request.path.startswith('/flasgger_static') or
+        request.path.startswith('/apispec')):
+        return response
+    response.headers["X-Frame-Options"]        = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-XSS-Protection"]       = "1; mode=block"
+    response.headers["Referrer-Policy"]        = "strict-origin-when-cross-origin"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: https://avatars.githubusercontent.com;"
+    )
+    return response
+
+# ─── Blueprints ───────────────────────────────────────────────────
 from routes import api
 app.register_blueprint(api, url_prefix='/api')
 
-# JWT error handlers
+# ─── JWT Error Handlers ───────────────────────────────────────────
 @jwt.expired_token_loader
 def expired_token_callback(jwt_header, jwt_payload):
-    return jsonify({
-        'error': 'Token has expired',
-        'message': 'Please log in again'
-    }), 401
+    return jsonify({'error': 'Token has expired', 'message': 'Please log in again'}), 401
 
 @jwt.invalid_token_loader
 def invalid_token_callback(error):
-    return jsonify({
-        'error': 'Invalid token',
-        'message': 'Token verification failed'
-    }), 401
+    return jsonify({'error': 'Invalid token', 'message': 'Token verification failed'}), 401
 
 @jwt.unauthorized_loader
 def missing_token_callback(error):
-    return jsonify({
-        'error': 'Authorization required',
-        'message': 'Request does not contain an access token'
-    }), 401
+    return jsonify({'error': 'Authorization required', 'message': 'Missing access token'}), 401
 
-# Health check endpoint
+# ─── Health Check ─────────────────────────────────────────────────
 @app.route('/health')
 def health_check():
-    return jsonify({'status': 'healthy'}), 200
+    """
+    Health check endpoint.
+    ---
+    tags:
+      - Health
+    responses:
+      200:
+        description: API je aktivan
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+              example: healthy
+            version:
+              type: string
+              example: 1.0.0
+    """
+    return jsonify({'status': 'healthy', 'version': '1.0.0'}), 200
 
-# Root endpoint
 @app.route('/')
 def index():
     return jsonify({
         'name': 'GitHub Activity Dashboard API',
         'version': '1.0.0',
-        'documentation': 'Visit /api endpoints',
+        'docs': 'http://backend:5000/apidocs/',
         'health': '/health',
-        'database': app.config['SQLALCHEMY_DATABASE_URI']
     })
 
-# Configure logging
+# ─── Logging ──────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
-def check_mysql_connection():
-    """Check if MySQL is running and accessible"""
-    import pymysql
-    from urllib.parse import urlparse
-    
-    db_url = app.config['SQLALCHEMY_DATABASE_URI']
-    parsed = urlparse(db_url)
-    
-    try:
-        connection = pymysql.connect(
-            host=parsed.hostname or 'localhost',
-            port=parsed.port or 3306,
-            user=parsed.username or 'root',
-            password=parsed.password or '',
-            database=parsed.path[1:] if parsed.path else None,
-            charset='utf8mb4',
-            cursorclass=pymysql.cursors.DictCursor
-        )
-        connection.close()
-        return True
-    except Exception as e:
-        print(f"[ERROR] MySQL connection failed: {e}")
-        return False
+# ─── Expose limiter za routes.py ──────────────────────────────────
+def get_limiter():
+    return limiter
 
-# Funkcija za inicijalizaciju baze
-def initialize_database():
-    """Initialize database with tables and default data"""
+
+# # ─── DB Init (za lokalni dev) ─────────────────────────────────────
+# def initialize_database():
+#     """Initialize database with tables and seed data"""
+#     with app.app_context():
+#         try:
+#             import pymysql
+#             from urllib.parse import urlparse
+#             db_url = app.config['SQLALCHEMY_DATABASE_URI']
+#             parsed = urlparse(db_url)
+#             connection = pymysql.connect(
+#                 host=parsed.hostname or 'localhost',
+#                 port=parsed.port or 3306,
+#                 user=parsed.username or 'root',
+#                 password=parsed.password or '',
+#                 database=parsed.path[1:] if parsed.path else None,
+#                 charset='utf8mb4',
+#             )
+#             connection.close()
+#             print("[INFO] MySQL connection OK")
+#         except Exception as e:
+#             print(f"[ERROR] MySQL connection failed: {e}")
+#             return False
+
+#         db.create_all()
+#         print("[INFO] Tables created")
+
+#         from werkzeug.security import generate_password_hash
+#         from models import User, Repository, Activity, Branch
+
+#         if User.query.count() == 0:
+#             for uname, email, pwd, role in [
+#                 ('admin',     'admin@dashboard.com',     'admin123',     'admin'),
+#                 ('moderator', 'moderator@dashboard.com', 'moderator123', 'moderator'),
+#                 ('viewer',    'viewer@dashboard.com',    'viewer123',    'viewer'),
+#             ]:
+#                 db.session.add(User(
+#                     username=uname, email=email,
+#                     password_hash=generate_password_hash(pwd), role=role
+#                 ))
+#             db.session.commit()
+#             print("[INFO] Default users created")
+
+#         if Repository.query.count() == 0:
+#             repos = [
+#                 Repository(github_id=28457823, name='flask',  full_name='pallets/flask',
+#                            owner='pallets',   url='https://github.com/pallets/flask',
+#                            description='Python micro framework', stars=65000, forks=16000, language='Python'),
+#                 Repository(github_id=4164482,  name='django', full_name='django/django',
+#                            owner='django',    url='https://github.com/django/django',
+#                            description='Web framework for perfectionists', stars=75000, forks=31000, language='Python'),
+#                 Repository(github_id=10270250, name='react',  full_name='facebook/react',
+#                            owner='facebook', url='https://github.com/facebook/react',
+#                            description='JavaScript library for UIs', stars=220000, forks=46000, language='JavaScript'),
+#             ]
+#             for r in repos:
+#                 db.session.add(r)
+#             db.session.commit()
+
+#             from datetime import datetime, timedelta
+#             flask_repo  = Repository.query.filter_by(full_name='pallets/flask').first()
+#             django_repo = Repository.query.filter_by(full_name='django/django').first()
+
+#             branches = [
+#                 Branch(name='main',        last_commit_sha='abc123', is_protected=True,  repository_id=flask_repo.id),
+#                 Branch(name='development', last_commit_sha='def456', is_protected=False, repository_id=flask_repo.id),
+#                 Branch(name='main',        last_commit_sha='ghi789', is_protected=True,  repository_id=django_repo.id),
+#             ]
+#             for b in branches:
+#                 db.session.add(b)
+#             db.session.commit()
+
+#             activities = [
+#                 Activity(github_id='commit_abc123', activity_type='push',         actor='octocat',    action='pushed',
+#                          ref='Fixed bug in auth',    timestamp=datetime.utcnow() - timedelta(hours=1),
+#                          data={'sha': 'abc123'},     repository_id=flask_repo.id,  branch_id=branches[0].id),
+#                 Activity(github_id='pr_123',         activity_type='pull_request', actor='developer1', action='opened',
+#                          ref='Add new feature',      timestamp=datetime.utcnow() - timedelta(hours=2),
+#                          data={'number': 123},       repository_id=flask_repo.id,  branch_id=branches[1].id),
+#                 Activity(github_id='issue_456',      activity_type='issue',        actor='user2',       action='opened',
+#                          ref='Bug: Crash on startup',timestamp=datetime.utcnow() - timedelta(hours=3),
+#                          data={'number': 456},       repository_id=django_repo.id, branch_id=branches[2].id),
+#             ]
+#             for a in activities:
+#                 db.session.add(a)
+#             db.session.commit()
+#             print("[INFO] Sample data created")
+
+#         return True
+import time
+from urllib.parse import urlparse
+from werkzeug.security import generate_password_hash
+from datetime import datetime, timedelta
+from app import app, db
+from models import User, Repository, Activity, Branch
+def initialize_database(max_retries=10, delay=3):
+    """Initialize database with tables and seed data (Docker-friendly)"""
     with app.app_context():
-        try:
-            # Proveri MySQL konekciju
-            print("[INFO] Checking MySQL connection...")
-            if not check_mysql_connection():
-                print("[ERROR] MySQL is not running or connection failed!")
-                print("[INFO] Please start MySQL server:")
-                print("  - Windows: Open XAMPP/WAMP and start MySQL")
-                print("  - Linux: sudo service mysql start")
-                print("  - Mac: brew services start mysql")
-                return False
-            
-            # Kreiraj tabele ako ne postoje
-            print("[INFO] Creating database tables...")
-            db.create_all()
-            print("[SUCCESS] Database tables created successfully")
-            
-            # Create default admin user if no users exist
-            from werkzeug.security import generate_password_hash
-            from models import User, Repository, Activity, Branch
-            
-            if User.query.count() == 0:
-                print("[INFO] Creating default users...")
-                
-                admin = User(
-                    username='admin',
-                    email='admin@githubdashboard.com',
-                    password_hash=generate_password_hash('admin123'),
-                    role='admin'
+        # ── Retry loop za Docker MySQL ──
+        db_url = app.config['SQLALCHEMY_DATABASE_URI']
+        parsed = urlparse(db_url)
+
+        for attempt in range(max_retries):
+            try:
+                connection = pymysql.connect(
+                    host=parsed.hostname or 'db',        # 'db' = ime MySQL servisa u docker-compose
+                    port=parsed.port or 3306,
+                    user=parsed.username or 'root',
+                    password=parsed.password or '',
+                    database=parsed.path[1:] if parsed.path else None,
+                    charset='utf8mb4',
                 )
-                db.session.add(admin)
-                
-                moderator = User(
-                    username='moderator',
-                    email='moderator@githubdashboard.com',
-                    password_hash=generate_password_hash('moderator123'),
-                    role='moderator'
-                )
-                db.session.add(moderator)
-                
-                viewer = User(
-                    username='viewer',
-                    email='viewer@githubdashboard.com',
-                    password_hash=generate_password_hash('viewer123'),
-                    role='viewer'
-                )
-                db.session.add(viewer)
-                
-                db.session.commit()
-                print("[SUCCESS] Default users created")
-                print("  - admin (admin123)")
-                print("  - moderator (moderator123)")
-                print("  - viewer (viewer123)")
-            
-            # Create sample repositories if none exist
-            if Repository.query.count() == 0:
-                print("[INFO] Creating sample repositories...")
-                
-                sample_repos = [
-                    Repository(
-                        github_id=28457823,
-                        name='flask',
-                        full_name='pallets/flask',
-                        owner='pallets',
-                        url='https://github.com/pallets/flask',
-                        description='The Python micro framework for building web applications.',
-                        stars=65000,
-                        forks=16000,
-                        language='Python'
-                    ),
-                    Repository(
-                        github_id=4164482,
-                        name='django',
-                        full_name='django/django',
-                        owner='django',
-                        url='https://github.com/django/django',
-                        description='The Web framework for perfectionists with deadlines.',
-                        stars=75000,
-                        forks=31000,
-                        language='Python'
-                    ),
-                    Repository(
-                        github_id=10270250,
-                        name='react',
-                        full_name='facebook/react',
-                        owner='facebook',
-                        url='https://github.com/facebook/react',
-                        description='A declarative, efficient, and flexible JavaScript library for building user interfaces.',
-                        stars=220000,
-                        forks=46000,
-                        language='JavaScript'
-                    )
-                ]
-                
-                for repo in sample_repos:
-                    db.session.add(repo)
-                
-                db.session.commit()
-                print("[SUCCESS] Sample repositories created")
-                
-                # Create sample branches
-                print("[INFO] Creating sample branches...")
-                flask_repo = Repository.query.filter_by(full_name='pallets/flask').first()
-                django_repo = Repository.query.filter_by(full_name='django/django').first()
-                
-                branches = [
-                    Branch(
-                        name='main',
-                        last_commit_sha='abc123def456',
-                        is_protected=True,
-                        repository_id=flask_repo.id
-                    ),
-                    Branch(
-                        name='development',
-                        last_commit_sha='def456ghi789',
-                        is_protected=False,
-                        repository_id=flask_repo.id
-                    ),
-                    Branch(
-                        name='main',
-                        last_commit_sha='ghi789jkl012',
-                        is_protected=True,
-                        repository_id=django_repo.id
-                    )
-                ]
-                
-                for branch in branches:
-                    db.session.add(branch)
-                
-                db.session.commit()
-                print("[SUCCESS] Sample branches created")
-                
-                # Create sample activities
-                print("[INFO] Creating sample activities...")
-                from datetime import datetime, timedelta
-                
-                activities = [
-                    Activity(
-                        github_id='commit_abc123',
-                        activity_type='push',
-                        actor='octocat',
-                        action='pushed',
-                        ref='Fixed bug in authentication',
-                        timestamp=datetime.utcnow() - timedelta(hours=1),
-                        data={'sha': 'abc123', 'message': 'Fixed bug', 'url': 'https://github.com/pallets/flask/commit/abc123'},
-                        repository_id=flask_repo.id,
-                        branch_id=branches[0].id
-                    ),
-                    Activity(
-                        github_id='pr_123',
-                        activity_type='pull_request',
-                        actor='developer1',
-                        action='opened',
-                        ref='Add new feature',
-                        timestamp=datetime.utcnow() - timedelta(hours=2),
-                        data={'number': 123, 'title': 'Add new feature', 'state': 'open'},
-                        repository_id=flask_repo.id,
-                        branch_id=branches[1].id
-                    ),
-                    Activity(
-                        github_id='issue_456',
-                        activity_type='issue',
-                        actor='user2',
-                        action='opened',
-                        ref='Bug report: Crash on startup',
-                        timestamp=datetime.utcnow() - timedelta(hours=3),
-                        data={'number': 456, 'title': 'Crash on startup', 'state': 'open'},
-                        repository_id=django_repo.id,
-                        branch_id=branches[2].id
-                    )
-                ]
-                
-                for activity in activities:
-                    db.session.add(activity)
-                
-                db.session.commit()
-                print("[SUCCESS] Sample activities created")
-            
-            # Count existing data
-            user_count = User.query.count()
-            repo_count = Repository.query.count()
-            activity_count = Activity.query.count()
-            branch_count = Branch.query.count()
-            
-            print(f"[INFO] Database initialized successfully!")
-            print(f"[INFO] Total records:")
-            print(f"  - Users: {user_count}")
-            print(f"  - Repositories: {repo_count}")
-            print(f"  - Branches: {branch_count}")
-            print(f"  - Activities: {activity_count}")
-            
-            return True
-            
-        except Exception as e:
-            print(f"[ERROR] Error initializing database: {e}")
-            import traceback
-            traceback.print_exc()
+                connection.close()
+                print("[INFO] MySQL connection OK")
+                break
+            except Exception as e:
+                print(f"[WARN] MySQL connection failed (attempt {attempt+1}/{max_retries}): {e}")
+                time.sleep(delay)
+        else:
+            print("[ERROR] Could not connect to MySQL after multiple attempts")
             return False
 
+        # ── Kreiranje tabela ──
+        db.create_all()
+        print("[INFO] Tables created")
+
+        # ── Default users ──
+        if User.query.count() == 0:
+            for uname, email, pwd, role in [
+                ('admin',     'admin@dashboard.com',     'admin123',     'admin'),
+                ('moderator', 'moderator@dashboard.com', 'moderator123', 'moderator'),
+                ('viewer',    'viewer@dashboard.com',    'viewer123',    'viewer'),
+            ]:
+                db.session.add(User(
+                    username=uname, email=email,
+                    password_hash=generate_password_hash(pwd), role=role
+                ))
+            db.session.commit()
+            print("[INFO] Default users created")
+
+        # ── Sample repositories ──
+        if Repository.query.count() == 0:
+            repos = [
+                Repository(github_id=28457823, name='flask',  full_name='pallets/flask',
+                           owner='pallets',   url='https://github.com/pallets/flask',
+                           description='Python micro framework', stars=65000, forks=16000, language='Python'),
+                Repository(github_id=4164482,  name='django', full_name='django/django',
+                           owner='django',    url='https://github.com/django/django',
+                           description='Web framework for perfectionists', stars=75000, forks=31000, language='Python'),
+                Repository(github_id=10270250, name='react',  full_name='facebook/react',
+                           owner='facebook', url='https://github.com/facebook/react',
+                           description='JavaScript library for UIs', stars=220000, forks=46000, language='JavaScript'),
+            ]
+            db.session.add_all(repos)
+            db.session.commit()
+
+            # ── Branches ──
+            flask_repo  = Repository.query.filter_by(full_name='pallets/flask').first()
+            django_repo = Repository.query.filter_by(full_name='django/django').first()
+
+            branches = [
+                Branch(name='main',        last_commit_sha='abc123', is_protected=True,  repository_id=flask_repo.id),
+                Branch(name='development', last_commit_sha='def456', is_protected=False, repository_id=flask_repo.id),
+                Branch(name='main',        last_commit_sha='ghi789', is_protected=True,  repository_id=django_repo.id),
+            ]
+            db.session.add_all(branches)
+            db.session.commit()
+
+            # ── Activities ──
+            activities = [
+                Activity(github_id='commit_abc123', activity_type='push',         actor='admin',    action='pushed',
+                         ref='Fixed bug in auth',    timestamp=datetime.utcnow() - timedelta(hours=1),
+                         data={'sha': 'abc123'},     repository_id=flask_repo.id,  branch_id=branches[0].id),
+                Activity(github_id='pr_123',         activity_type='pull_request', actor='developer1', action='opened',
+                         ref='Add new feature',      timestamp=datetime.utcnow() - timedelta(hours=2),
+                         data={'number': 123},       repository_id=flask_repo.id,  branch_id=branches[1].id),
+                Activity(github_id='issue_456',      activity_type='issue',        actor='admin',       action='opened',
+                         ref='Bug: Crash on startup',timestamp=datetime.utcnow() - timedelta(hours=3),
+                         data={'number': 456},       repository_id=django_repo.id, branch_id=branches[2].id),
+            ]
+            db.session.add_all(activities)
+            db.session.commit()
+            print("[INFO] Sample data created")
+
+        return True
+# Ovo se izvršava i kada gunicorn pokrene app
+# def create_tables():
+#     with app.app_context():
+#         try:
+#             db.create_all()
+#             print("[INFO] Tables created/verified")
+            
+#             from werkzeug.security import generate_password_hash
+#             from models import User
+            
+#             if User.query.count() == 0:
+#                 for uname, email, pwd, role in [
+#                     ('admin',     'admin@dashboard.com',     'admin123',     'admin'),
+#                     ('moderator', 'moderator@dashboard.com', 'moderator123', 'moderator'),
+#                     ('viewer',    'viewer@dashboard.com',    'viewer123',    'viewer'),
+#                 ]:
+#                     db.session.add(User(
+#                         username=uname, email=email,
+#                         password_hash=generate_password_hash(pwd), role=role
+#                     ))
+#                 db.session.commit()
+#                 print("[INFO] Default users created")
+#         except Exception as e:
+#             print(f"[ERROR] Table creation failed: {e}")
+
+# Pozovi odmah — radi i za gunicorn i za python app.py
+initialize_database()
+# create_tables()
+
 if __name__ == '__main__':
-    print("\n" + "="*60)
-    print("GitHub Activity Dashboard API - MySQL Edition")
-    print("="*60)
-    
-    # Inicijaliziraj bazu prije pokretanja servera
+    print("\n" + "=" * 60)
+    print("GitHub Activity Dashboard API")
+    print(f"Swagger UI: http://localhost:5000/apidocs/")
+    print("=" * 60)
+
     if initialize_database():
-        print("\n" + "="*60)
-        print("Server Information")
-        print("="*60)
-        print(f"Database: {app.config.get('SQLALCHEMY_DATABASE_URI')}")
-        print("Server: http://localhost:5000")
-        print("\nAPI Endpoints:")
-        print("  GET  /health                    - Health check")
-        print("  POST /api/auth/register         - Register user")
-        print("  POST /api/auth/login            - Login")
-        print("  GET  /api/auth/me               - Get current user")
-        print("  GET  /api/repositories          - List repositories")
-        print("  POST /api/repositories          - Create repository (Admin/Mod)")
-        print("  GET  /api/activities            - List activities")
-        print("\nDefault Users:")
-        print("  admin     - admin123")
-        print("  moderator - moderator123")
-        print("  viewer    - viewer123")
-        print("="*60)
-        print("\nPress Ctrl+C to stop the server\n")
-        
         app.run(debug=True, port=5000, host='0.0.0.0')
     else:
-        print("\n[ERROR] Failed to initialize database. Please check MySQL connection.")
-        print("[INFO] Make sure MySQL is running and the database exists.")
+        print("[ERROR] Database init failed.")
